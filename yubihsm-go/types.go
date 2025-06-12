@@ -1,5 +1,7 @@
 package yubihsmgo
 
+type SessionID uint8
+
 type HSM struct {
 	endpoint string
 }
