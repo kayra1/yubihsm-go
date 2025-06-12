@@ -2,6 +2,7 @@ package yubihsmgo
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -25,36 +26,84 @@ func (hsm *HSM) BlinkDevice(sessionID SessionID, seconds uint32) error {
 	return err
 }
 
+// all errors should be returned as errors.Join("failed command: ", err)
 func (hsm *HSM) OpenSession(authkey uint16, password string) (SessionID, error) {
-	args := []string{"session", "open", fmt.Sprintf("%d", authkey), password}
-	result, err := hsm.sendCommand(args)
+	result, err := hsm.sendCommand([]string{"session", "open", fmt.Sprintf("%d", authkey), password})
 	if err != nil {
 		return 0, err
 	}
 	return SessionID([]byte(result)[0]), nil
 }
 
-func (hsm *HSM) GenerateSymmetricKey(keyID uint16, password string) error {
-	panic("not implemented")
+func (hsm *HSM) GenerateSymmetricKey(sessionID SessionID, keyID ObjectID, label string, domains []Domain, capabilities []Capability, algorithm Algorithm) error {
+	domainsStr := make([]string, len(domains))
+	capabilitiesStr := make([]string, len(capabilities))
+	for i, domain := range domains {
+		domainsStr[i] = fmt.Sprintf("%d", domain)
+	}
+	for i, capability := range capabilities {
+		capabilitiesStr[i] = fmt.Sprintf("%s", capability)
+	}
+	_, err := hsm.sendCommand([]string{
+		"generate", "symmetric",
+		fmt.Sprintf("%d", sessionID),
+		fmt.Sprintf("%d", keyID),
+		label,
+		strings.Join(domainsStr, ","),
+		strings.Join(capabilitiesStr, ","),
+		fmt.Sprintf("%s", algorithm),
+	})
+	return err
 }
 
-func (hsm *HSM) EncryptAESCBC(keyID, iv uint16, data []byte) ([]byte, error) {
-	// convert to base64 first
-	panic("not implemented")
+func (hsm *HSM) EncryptAESCBC(sessionID SessionID, keyID ObjectID, iv uint16, data []byte) ([]byte, error) {
+	result, err := hsm.sendCommand([]string{
+		"encrypt", "aescbc",
+		fmt.Sprintf("%d", sessionID),
+		fmt.Sprintf("%d", keyID),
+		fmt.Sprintf("%#x", iv),
+		base64.StdEncoding.EncodeToString(data),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return []byte(result), nil
 }
 
-func (hsm *HSM) DecryptAESCBC(keyID, iv uint16, data []byte) ([]byte, error) {
-	// convert from base64 first
-	// all errors should be returned as errors.Join("failed command: ", err)
-	panic("not implemented")
+func (hsm *HSM) DecryptAESCBC(sessionID SessionID, keyID ObjectID, iv uint16, data []byte) ([]byte, error) {
+	result, err := hsm.sendCommand([]string{
+		"decrypt", "aescbc",
+		fmt.Sprintf("%d", sessionID),
+		fmt.Sprintf("%d", keyID),
+		fmt.Sprintf("%#x", iv),
+		string(data),
+	})
+	if err != nil {
+		return nil, err
+	}
+	decryptedString, err := base64.StdEncoding.DecodeString(result)
+	if err != nil {
+		return nil, err
+	}
+	return decryptedString, nil
 }
 
-func (hsm *HSM) GetPseudoRandom(sessionID uint8, count uint16) ([]byte, error) {
-	panic("not implemented")
+func (hsm *HSM) GetPseudoRandom(sessionID uint8, count uint32) ([]byte, error) {
+	result, err := hsm.sendCommand([]string{
+		"get", "random",
+		fmt.Sprintf("%d", sessionID),
+		fmt.Sprintf("%d", count),
+		"-",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return []byte(result), nil
 }
 
-func (hsm *HSM) CloseSession() error {
-	panic("not implemented")
+func (hsm *HSM) CloseSession(sessionID SessionID) error {
+	_, err := hsm.sendCommand([]string{"session", "close", fmt.Sprintf("%d", sessionID)})
+	return err
 }
 
 func (hsm *HSM) GetStatus() (string, error) {
