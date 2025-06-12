@@ -21,18 +21,17 @@ func New(endpoint string) *HSM {
 }
 
 func (hsm *HSM) BlinkDevice(sessionID SessionID, seconds uint32) error {
-	panic("not implemented")
+	_, err := hsm.sendCommand([]string{"device", "blink", fmt.Sprintf("%d", sessionID), fmt.Sprintf("%d", seconds)})
+	return err
 }
 
 func (hsm *HSM) OpenSession(authkey uint16, password string) (SessionID, error) {
 	args := []string{"session", "open", fmt.Sprintf("%d", authkey), password}
 	result, err := hsm.sendCommand(args)
-	fmt.Println(result)
-	fmt.Println(err)
 	if err != nil {
 		return 0, err
 	}
-	return 0, nil
+	return SessionID([]byte(result)[0]), nil
 }
 
 func (hsm *HSM) GenerateSymmetricKey(keyID uint16, password string) error {
@@ -54,16 +53,12 @@ func (hsm *HSM) GetPseudoRandom(sessionID uint8, count uint16) ([]byte, error) {
 	panic("not implemented")
 }
 
-func (hsm *HSM) OpenSessionAsym(authkey uint16, privkey string) error {
-	panic("not implemented")
-}
-
 func (hsm *HSM) CloseSession() error {
 	panic("not implemented")
 }
 
 func (hsm *HSM) GetStatus() (string, error) {
-	newRequest, err := http.NewRequest("GET", fmt.Sprintf("%s/command/status", hsm.endpoint), nil)
+	newRequest, err := http.NewRequest("GET", fmt.Sprintf("%s/connector/status", hsm.endpoint), nil)
 	if err != nil {
 		return "", err
 	}
